@@ -5,6 +5,8 @@ import numpy as np
 import torch.nn.functional as F
 import math, copy, time
 from torch.autograd import Variable
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 # NOTE ==============================================
@@ -166,7 +168,7 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
             _input = torch.tanh(torch.add(self.dropout(l_ih(_input)), l_hh(hidden[layer])))
             new_hidden.append(_input)
 
-        outputs.append(torch.tanh(self.output(new_hidden[layer])))
+        outputs.append(torch.tanh(self.output(_input)))
 
     logits = torch.stack(outputs, 0)
     new_hidden = torch.stack(new_hidden)
