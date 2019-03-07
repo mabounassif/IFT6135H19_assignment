@@ -83,7 +83,7 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
         self.rnn_modules.append(linear_hh)
 
     self.embed = nn.Embedding(vocab_size, emb_size)
-    self.dropout = nn.Dropout(p=dp_keep_prob)
+    self.dropout = nn.Dropout(p=1-dp_keep_prob)
     self.output = nn.Linear(hidden_size, vocab_size)
 
     self.rnn_modules.append(self.embed)
@@ -162,10 +162,11 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
         for layer in range(self.num_layers):
             l_hh, l_ih = self.hidden_layers[layer]
 
-            _input = torch.tanh(self.dropout(l_ih(_input)) + l_hh(hidden[layer]))
-            new_hidden.append(_input)
+            h = torch.tanh(l_ih(_input) + l_hh(hidden[layer]))
+            new_hidden.append(h)
+            _input = self.dropout(h)
 
-        outputs.append(torch.tanh(self.output(_input)))
+        outputs.append(self.output(_input))
 
     logits = torch.stack(outputs, 0)
     new_hidden = torch.stack(new_hidden)
