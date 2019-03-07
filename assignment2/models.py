@@ -395,6 +395,8 @@ class MultiHeadedAttention(nn.Module):
         self.output = nn.Linear(n_units, n_units)
 
         # TODO: create/initialize any necessary parameters or layers
+        # Initialize all weights and biases uniformly in the range [-k, k],
+        # where k is the square root of 1/n_units.
         # Note: the only Pytorch modules you are allowed to use are nn.Linear
         # and nn.Dropout
 
