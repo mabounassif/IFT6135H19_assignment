@@ -5,9 +5,6 @@ import numpy as np
 import torch.nn.functional as F
 import math, copy, time
 from torch.autograd import Variable
-import matplotlib as mpl
-mpl.use('Agg')
-import matplotlib.pyplot as plt
 
 # NOTE ==============================================
 #
@@ -73,9 +70,6 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
 
     self.rnn_modules = nn.ModuleList()
 
-    self.embed = nn.Embedding(vocab_size, emb_size)
-    self.dropout = nn.Dropout(p=dp_keep_prob)
-
     self.hidden_layers = []
     for layer in range(num_layers):
         layer_input_size = emb_size if layer == 0 else hidden_size
@@ -83,10 +77,13 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
         linear_ih = nn.Linear(layer_input_size, hidden_size, True)
         linear_hh = nn.Linear(hidden_size, hidden_size)
 
-        self.rnn_modules.append(linear_ih)
-        self.rnn_modules.append(linear_hh)
         self.hidden_layers.append((linear_hh, linear_ih))
 
+        self.rnn_modules.append(linear_ih)
+        self.rnn_modules.append(linear_hh)
+
+    self.embed = nn.Embedding(vocab_size, emb_size)
+    self.dropout = nn.Dropout(p=dp_keep_prob)
     self.output = nn.Linear(hidden_size, vocab_size)
 
     self.rnn_modules.append(self.embed)
@@ -160,12 +157,12 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     new_hidden = []
     outputs = []
     for t in range(self.seq_len):
-        _input = self.embed(inputs[t, :])
+        _input = self.dropout(self.embed(inputs[t, :]))
 
         for layer in range(self.num_layers):
             l_hh, l_ih = self.hidden_layers[layer]
 
-            _input = torch.tanh(torch.add(self.dropout(l_ih(_input)), l_hh(hidden[layer])))
+            _input = torch.tanh(self.dropout(l_ih(_input)) + l_hh(hidden[layer]))
             new_hidden.append(_input)
 
         outputs.append(torch.tanh(self.output(_input)))
@@ -173,7 +170,7 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     logits = torch.stack(outputs, 0)
     new_hidden = torch.stack(new_hidden)
 
-    return logits.view(self.seq_len, self.batch_size, self.vocab_size), new_hidden
+    return logits, new_hidden
 
   def generate(self, input, hidden, generated_seq_len):
     # TODO ========================
