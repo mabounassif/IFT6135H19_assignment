@@ -101,12 +101,6 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
 
     # Initialize input
     self.embed.apply(init_weights)
-
-    # Initialize hidden layers
-    for l_hh, l_ih in hidden_layers:
-        l_hh.apply(init_weights)
-        l_ih.apply(init_weights)
-
     # Initialize output
     self.output.apply(init_weights)
 
