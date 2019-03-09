@@ -206,18 +206,93 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
     super(GRU, self).__init__()
 
     # TODO ========================
+    self.batch_size = batch_size
+    self.hidden_size = hidden_size
+    self.num_layers = num_layers
+    self.vocab_size = vocab_size
+    self.seq_len = seq_len
+
+    self.gru_modules = nn.ModuleList()
+
+    self.hidden_layers = []
+    for layer in range(num_layers):
+        layer_input_size = emb_size if layer == 0 else hidden_size
+
+        l_ri = nn.Linear(layer_input_size, hidden_size)
+        l_rh = nn.Linear(hidden_size, hidden_size, True)
+
+        l_zi = nn.Linear(layer_input_size, hidden_size)
+        l_zh = nn.Linear(hidden_size, hidden_size, True)
+
+        l_tilde_hi = nn.Linear(layer_input_size, hidden_size)
+        l_tilde_hh = nn.Linear(hidden_size, hidden_size, True)
+
+        self.hidden_layers.append({
+            'reset': (l_rh, l_ri),
+            'forget': (l_zh, l_zi),
+            'tilde_h': (l_tilde_hh, l_tilde_hi)
+        })
+
+        self.gru_modules.extend([
+            l_ri,
+            l_rh,
+            l_zi,
+            l_zh,
+            l_tilde_hi,
+            l_tilde_hh
+        ])
+
+    self.embed = nn.Embedding(vocab_size, emb_size)
+    self.dropout = nn.Dropout(p=1-dp_keep_prob)
+    self.output = nn.Linear(hidden_size, vocab_size)
+
+    self.gru_modules.append(self.embed)
+    self.gru_modules.append(self.dropout)
+    self.gru_modules.append(self.output)
 
   def init_weights_uniform(self):
     # TODO ========================
-    pass
+    def init_weights(m):
+        nn.init.uniform_(m.weight, -0.1, 0.1)
+        m.bias.data.fill_(0)
+
+    # Initialize input
+    self.embed.apply(init_weights)
+    # Initialize output
+    self.output.apply(init_weights)
 
   def init_hidden(self):
     # TODO ========================
-    return # a parameter tensor of shape (self.num_layers, self.batch_size, self.hidden_size)
+    return torch.zeros([self.num_layers, self.batch_size, self.hidden_size])
 
   def forward(self, inputs, hidden):
     # TODO ========================
-    return logits.view(self.seq_len, self.batch_size, self.vocab_size), hidden
+    new_hidden = []
+    outputs = []
+
+    for t in range(self.seq_len):
+        _input = self.dropout(self.embed(inputs[t, :]))
+
+        for layer in range(self.num_layers):
+            hl = self.hidden_layers[layer]
+            l_ri, l_rh = hl['reset']
+            l_fi, l_fh = hl['forget']
+            l_tilde_hi, l_tilde_hh = hl['tilde_h']
+
+            r = torch.sigmoid(l_ri(_input) + l_rh(hidden[layer]))
+            z = torch.sigmoid(l_fi(_input) + l_fh(hidden[layer]))
+            tilde_h = torch.tanh(l_tilde_hi(_input) + l_tilde_hh(r*hidden[layer]))
+
+            h = (1-z)*hidden[layer] + z*tilde_h
+            new_hidden.append(h)
+            _input = self.dropout(h)
+
+        outputs.append(self.output(_input))
+
+    logits = torch.stack(outputs, 0)
+    new_hidden = torch.stack(new_hidden)
+
+    return logits, new_hidden
 
   def generate(self, input, hidden, generated_seq_len):
     # TODO ========================
