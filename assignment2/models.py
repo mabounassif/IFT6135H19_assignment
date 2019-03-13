@@ -369,12 +369,20 @@ class MultiHeadedAttention(nn.Module):
         dropout: probability of DROPPING units
         """
         super(MultiHeadedAttention, self).__init__()
+
         # This sets the size of the keys, values, and queries (self.d_k) to all
         # be equal to the number of output units divided by the number of heads.
         self.d_k = n_units // n_heads
+        self.n_units = n_units
+        self.n_heads = n_heads
         # This requires the number of n_heads to evenly divide n_units.
         assert n_units % n_heads == 0
-        self.n_units = n_units
+
+        self.l_q = nn.Linear(n_units, n_units)
+        self.l_v = nn.Linear(n_units, n_units)
+        self.l_k = nn.Linear(n_units, n_units)
+        self.dropout = nn.Dropout(dropout)
+        self.output = nn.Linear(n_units, n_units)
 
         # TODO: create/initialize any necessary parameters or layers
         # Note: the only Pytorch modules you are allowed to use are nn.Linear
@@ -388,7 +396,30 @@ class MultiHeadedAttention(nn.Module):
         # generating the "attention values" (i.e. A_i in the .tex)
         # Also apply dropout to the attention values.
 
-        return # size: (batch_size, seq_len, self.n_units)
+        batch_size = query.size(0)
+
+        k = self.l_k(key).view(batch_size, -1, self.n_heads, self.d_k)
+        q = self.l_q(query).view(batch_size, -1, self.n_heads, self.d_k)
+        v = self.l_v(value).view(batch_size, -1, self.n_heads, self.d_k)
+
+        k = k.transpose(1,2)
+        q = q.transpose(1,2)
+        v = v.transpose(1,2)
+
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
+
+        if mask is not None:
+            mask = mask.unsqueeze(1)
+            scores = scores.masked_fill(mask == 0, -1e9)
+
+        scores = nn.functional.softmax(scores, -1)
+        scores = self.dropout(scores)
+
+        output = torch.matmul(scores, v)
+        concat = output.transpose(1,2).contiguous().view(batch_size, -1, self.n_units)
+
+        # size: (batch_size, seq_len, self.n_units)
+        return self.output(concat)
 
 
 
