@@ -275,9 +275,9 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
 
         for layer in range(self.num_layers):
             hl = self.hidden_layers[layer]
-            l_ri, l_rh = hl['reset']
-            l_fi, l_fh = hl['forget']
-            l_tilde_hi, l_tilde_hh = hl['tilde_h']
+            l_rh, l_ri = hl['reset']
+            l_fh, l_fi = hl['forget']
+            l_tilde_hh, l_tilde_hi = hl['tilde_h']
 
             r = torch.sigmoid(l_ri(_input) + l_rh(hidden[layer]))
             z = torch.sigmoid(l_fi(_input) + l_fh(hidden[layer]))
