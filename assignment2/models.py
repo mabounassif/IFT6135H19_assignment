@@ -81,8 +81,8 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     for layer in range(num_layers):
         layer_input_size = emb_size if layer == 0 else hidden_size
 
-        linear_ih = nn.Linear(layer_input_size, hidden_size, True)
-        linear_hh = nn.Linear(hidden_size, hidden_size)
+        linear_ih = nn.Linear(layer_input_size, hidden_size)
+        linear_hh = nn.Linear(hidden_size, hidden_size, True)
 
         self.hidden_layers.append((linear_hh, linear_ih))
 
@@ -97,7 +97,7 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     self.rnn_modules.append(self.dropout)
     self.rnn_modules.append(self.output)
 
-    # self.init_weights_uniform()
+    self.init_weights_uniform()
 
 
   def init_weights_uniform(self):
