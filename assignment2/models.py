@@ -27,6 +27,13 @@ from torch.autograd import Variable
 # except where indicated to implement the multi-head
 # attention.
 
+def init_weights(k):
+    def _init_weight(m):
+        nn.init.uniform_(m.weight, -1*k, k)
+        if hasattr(m, 'bias'):
+            m.bias.data.fill_(0)
+
+    return _init_weight
 
 def clones(module, N):
     "A helper function for producing N identical layers (each with their own parameters)."
@@ -90,19 +97,20 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     self.rnn_modules.append(self.dropout)
     self.rnn_modules.append(self.output)
 
+    # self.init_weights_uniform()
+
 
   def init_weights_uniform(self):
     # TODO ========================
     # Initialize all the weights uniformly in the range [-0.1, 0.1]
     # and all the biases to 0 (in place)
-    def init_weights(m):
-        nn.init.uniform_(m.weight, -0.1, 0.1)
-        m.bias.data.fill_(0)
+    _, i = self.hidden_layers[0]
+    i.apply(init_weights(1. / math.sqrt(self.hidden_size)))
 
     # Initialize input
-    self.embed.apply(init_weights)
+    self.embed.apply(init_weights(0.1))
     # Initialize output
-    self.output.apply(init_weights)
+    self.output.apply(init_weights(0.1))
 
   def init_hidden(self):
     # TODO ========================
@@ -250,16 +258,24 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
     self.gru_modules.append(self.dropout)
     self.gru_modules.append(self.output)
 
+    self.init_weights_uniform()
+
   def init_weights_uniform(self):
     # TODO ========================
-    def init_weights(m):
-        nn.init.uniform_(m.weight, -0.1, 0.1)
-        m.bias.data.fill_(0)
+    f_layer = self.hidden_layers[0]
+
+    _ , l_ri = f_layer['reset']
+    _ , l_zi = f_layer['forget']
+    _ , l_tilde_hi = f_layer['tilde_h']
+
+    l_ri.apply(init_weights(1. / math.sqrt(self.hidden_size)))
+    l_zi.apply(init_weights(1. / math.sqrt(self.hidden_size)))
+    l_tilde_hi.apply(init_weights(1. / math.sqrt(self.hidden_size)))
 
     # Initialize input
-    self.embed.apply(init_weights)
+    self.embed.apply(init_weights(0.1))
     # Initialize output
-    self.output.apply(init_weights)
+    self.output.apply(init_weights(0.1))
 
   def init_hidden(self):
     # TODO ========================
