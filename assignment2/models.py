@@ -403,6 +403,7 @@ class MultiHeadedAttention(nn.Module):
 
 =======
         # ETA: you can also use softmax
+        # ETA: you can use the "clones" function we provide.
         
 >>>>>>> pytorch's built in softmax is allowed
     def forward(self, query, key, value, mask=None):
