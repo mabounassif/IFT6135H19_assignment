@@ -27,11 +27,11 @@ from torch.autograd import Variable
 # except where indicated to implement the multi-head
 # attention.
 
-def init_weights(k):
+def init_weights(k, b_k=0):
     def _init_weight(m):
         nn.init.uniform_(m.weight, -1*k, k)
-        if hasattr(m, 'bias'):
-            m.bias.data.fill_(0)
+        if hasattr(m, 'bias') and m.bias is not None:
+            nn.init.uniform_(m.bias, -1*b_k, b_k)
 
     return _init_weight
 
@@ -81,21 +81,17 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     for layer in range(num_layers):
         layer_input_size = emb_size if layer == 0 else hidden_size
 
-        linear_ih = nn.Linear(layer_input_size, hidden_size)
+        linear_ih = nn.Linear(layer_input_size, hidden_size, False)
         linear_hh = nn.Linear(hidden_size, hidden_size, True)
 
         self.hidden_layers.append((linear_hh, linear_ih))
-
-        self.rnn_modules.append(linear_ih)
-        self.rnn_modules.append(linear_hh)
+        self.rnn_modules.extend([linear_ih, linear_hh])
 
     self.embed = nn.Embedding(vocab_size, emb_size)
     self.dropout = nn.Dropout(p=1-dp_keep_prob)
-    self.output = nn.Linear(hidden_size, vocab_size)
+    self.output = nn.Linear(hidden_size, vocab_size, True)
 
-    self.rnn_modules.append(self.embed)
-    self.rnn_modules.append(self.dropout)
-    self.rnn_modules.append(self.output)
+    self.rnn_modules.extend([self.embed, self.dropout, self.output])
 
     self.init_weights_uniform()
 
@@ -104,8 +100,10 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     # TODO ========================
     # Initialize all the weights uniformly in the range [-0.1, 0.1]
     # and all the biases to 0 (in place)
-    _, i = self.hidden_layers[0]
-    i.apply(init_weights(1. / math.sqrt(self.hidden_size)))
+    for h, i in self.hidden_layers:
+        k = 1. / math.sqrt(self.hidden_size)
+        h.apply(init_weights(k, k))
+        i.apply(init_weights(k, k))
 
     # Initialize input
     self.embed.apply(init_weights(0.1))
@@ -156,22 +154,23 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
               if you are curious.
                     shape: (num_layers, batch_size, hidden_size)
     """
-    new_hidden = []
+    new_hiddens = []
     outputs = []
+    emb_inputs = self.embed(inputs)
     for t in range(self.seq_len):
-        _input = self.dropout(self.embed(inputs[t, :]))
+        _input = self.dropout(emb_inputs[t, :])
 
         for layer in range(self.num_layers):
             l_hh, l_ih = self.hidden_layers[layer]
 
             h = torch.tanh(l_ih(_input) + l_hh(hidden[layer]))
-            new_hidden.append(h)
+            new_hiddens.append(h)
             _input = self.dropout(h)
 
         outputs.append(self.output(_input))
 
     logits = torch.stack(outputs, 0)
-    new_hidden = torch.stack(new_hidden)
+    new_hidden = torch.stack(new_hiddens)
 
     return logits, new_hidden
 
@@ -226,13 +225,13 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
     for layer in range(num_layers):
         layer_input_size = emb_size if layer == 0 else hidden_size
 
-        l_ri = nn.Linear(layer_input_size, hidden_size)
+        l_ri = nn.Linear(layer_input_size, hidden_size, False)
         l_rh = nn.Linear(hidden_size, hidden_size, True)
 
-        l_zi = nn.Linear(layer_input_size, hidden_size)
+        l_zi = nn.Linear(layer_input_size, hidden_size, False)
         l_zh = nn.Linear(hidden_size, hidden_size, True)
 
-        l_tilde_hi = nn.Linear(layer_input_size, hidden_size)
+        l_tilde_hi = nn.Linear(layer_input_size, hidden_size, False)
         l_tilde_hh = nn.Linear(hidden_size, hidden_size, True)
 
         self.hidden_layers.append({
@@ -252,25 +251,20 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
 
     self.embed = nn.Embedding(vocab_size, emb_size)
     self.dropout = nn.Dropout(p=1-dp_keep_prob)
-    self.output = nn.Linear(hidden_size, vocab_size)
+    self.output = nn.Linear(hidden_size, vocab_size, True)
 
-    self.gru_modules.append(self.embed)
-    self.gru_modules.append(self.dropout)
-    self.gru_modules.append(self.output)
+    self.gru_modules.extend([self.embed, self.dropout, self.output])
 
     self.init_weights_uniform()
 
   def init_weights_uniform(self):
     # TODO ========================
-    f_layer = self.hidden_layers[0]
-
-    _ , l_ri = f_layer['reset']
-    _ , l_zi = f_layer['forget']
-    _ , l_tilde_hi = f_layer['tilde_h']
-
-    l_ri.apply(init_weights(1. / math.sqrt(self.hidden_size)))
-    l_zi.apply(init_weights(1. / math.sqrt(self.hidden_size)))
-    l_tilde_hi.apply(init_weights(1. / math.sqrt(self.hidden_size)))
+    for layer in self.hidden_layers:
+        for gate in layer:
+            h, i = layer[gate]
+            k = 1. / math.sqrt(self.hidden_size)
+            h.apply(init_weights(k, k))
+            i.apply(init_weights(k, k))
 
     # Initialize input
     self.embed.apply(init_weights(0.1))
