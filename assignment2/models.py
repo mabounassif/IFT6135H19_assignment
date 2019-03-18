@@ -85,7 +85,7 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
         linear_hh = nn.Linear(hidden_size, hidden_size, True)
 
         self.hidden_layers.append((linear_hh, linear_ih))
-        self.rnn_modules.extend([linear_ih, linear_hh])
+        self.rnn_modules.extend([linear_hh, linear_ih])
 
     self.embed = nn.Embedding(vocab_size, emb_size)
     self.dropout = nn.Dropout(p=1-dp_keep_prob)
@@ -95,13 +95,12 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
 
     self.init_weights_uniform()
 
-
   def init_weights_uniform(self):
     # TODO ========================
     # Initialize all the weights uniformly in the range [-0.1, 0.1]
     # and all the biases to 0 (in place)
+    k = 1. / math.sqrt(self.hidden_size)
     for h, i in self.hidden_layers:
-        k = 1. / math.sqrt(self.hidden_size)
         h.apply(init_weights(k, k))
         i.apply(init_weights(k, k))
 
@@ -156,9 +155,9 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
     """
     new_hiddens = []
     outputs = []
-    emb_inputs = self.embed(inputs)
+    emb_inputs = self.dropout(self.embed(inputs))
     for t in range(self.seq_len):
-        _input = self.dropout(emb_inputs[t, :])
+        _input = emb_inputs[t, :]
 
         for layer in range(self.num_layers):
             l_hh, l_ih = self.hidden_layers[layer]
@@ -169,10 +168,9 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
 
         outputs.append(self.output(_input))
 
-    logits = torch.stack(outputs, 0)
-    new_hidden = torch.stack(new_hiddens)
+    logits = torch.cat(outputs)
 
-    return logits, new_hidden
+    return logits, new_hiddens
 
   def generate(self, input, hidden, generated_seq_len):
     # TODO ========================
@@ -299,8 +297,7 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
 
         outputs.append(self.output(_input))
 
-    logits = torch.stack(outputs, 0)
-    new_hidden = torch.stack(new_hidden)
+    logits = torch.cat(outputs, 0)
 
     return logits, new_hidden
 
