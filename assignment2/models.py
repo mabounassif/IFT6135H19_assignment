@@ -153,24 +153,28 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
               if you are curious.
                     shape: (num_layers, batch_size, hidden_size)
     """
-    new_hiddens = []
     outputs = []
+    new_hidden = hidden
+
     emb_inputs = self.dropout(self.embed(inputs))
+
     for t in range(self.seq_len):
+        tmp_hidden = []
         _input = emb_inputs[t, :]
 
         for layer in range(self.num_layers):
             l_hh, l_ih = self.hidden_layers[layer]
 
-            h = torch.tanh(l_ih(_input) + l_hh(hidden[layer]))
-            new_hiddens.append(h)
+            h = torch.tanh(l_ih(_input) + l_hh(new_hidden[layer]))
+            tmp_hidden.append(h)
             _input = self.dropout(h)
 
         outputs.append(self.output(_input))
+        new_hidden = tmp_hidden
 
     logits = torch.cat(outputs)
 
-    return logits, new_hiddens
+    return logits, new_hidden
 
   def generate(self, input, hidden, generated_seq_len):
     # TODO ========================
@@ -275,11 +279,14 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
 
   def forward(self, inputs, hidden):
     # TODO ========================
-    new_hidden = []
+    new_hidden = hidden
     outputs = []
 
+    emb_inputs = self.dropout(self.embed(inputs))
+
     for t in range(self.seq_len):
-        _input = self.dropout(self.embed(inputs[t, :]))
+        tmp_hidden = []
+        _input = emb_inputs[t, :]
 
         for layer in range(self.num_layers):
             hl = self.hidden_layers[layer]
@@ -287,15 +294,17 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
             l_fh, l_fi = hl['forget']
             l_tilde_hh, l_tilde_hi = hl['tilde_h']
 
-            r = torch.sigmoid(l_ri(_input) + l_rh(hidden[layer]))
-            z = torch.sigmoid(l_fi(_input) + l_fh(hidden[layer]))
-            tilde_h = torch.tanh(l_tilde_hi(_input) + l_tilde_hh(r*hidden[layer]))
+            r = torch.sigmoid(l_ri(_input) + l_rh(new_hidden[layer]))
+            z = torch.sigmoid(l_fi(_input) + l_fh(new_hidden[layer]))
+            tilde_h = torch.tanh(l_tilde_hi(_input) + l_tilde_hh(r*new_hidden[layer]))
 
-            h = (1-z)*hidden[layer] + z*tilde_h
-            new_hidden.append(h)
+            h = (1-z)*new_hidden[layer] + z*tilde_h
+
+            tmp_hidden.append(h)
             _input = self.dropout(h)
 
         outputs.append(self.output(_input))
+        new_hidden = tmp_hidden
 
     logits = torch.cat(outputs, 0)
 
