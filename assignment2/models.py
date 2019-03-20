@@ -43,7 +43,7 @@ def clones(module, N):
 class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities.
   def __init__(self, emb_size, hidden_size, seq_len, batch_size, vocab_size, num_layers, dp_keep_prob):
     """
-    emb_size:     The numvwe of units in the input embeddings
+    emb_size:     The number of units in the input embeddings
     hidden_size:  The number of hidden units per layer
     seq_len:      The length of the input sequences
     vocab_size:   The number of tokens in the vocabulary (10,000 for Penn TreeBank)
@@ -93,12 +93,15 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
 
     self.rnn_modules.extend([self.embed, self.dropout, self.output])
 
-    self.init_weights_uniform()
+    self.init_weights()
 
-  def init_weights_uniform(self):
+  def init_weights(self):
     # TODO ========================
-    # Initialize all the weights uniformly in the range [-0.1, 0.1]
-    # and all the biases to 0 (in place)
+    # Initialize the embedding and output weights uniformly in the range [-0.1, 0.1]
+    # and the embedding and output biases to 0 (in place).
+    # Initialize all other (i.e. recurrent and linear) weights AND biases with
+    # Glorot; i.e. uniformly in the range [-k, k] where k is the square root of
+    # 1/hidden_size
     k = 1. / math.sqrt(self.hidden_size)
     for h, i in self.hidden_layers:
         h.apply(init_weights(k, k))
@@ -119,7 +122,7 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
 
   def forward(self, inputs, hidden):
     # TODO ========================
-    # Compute the forward pass, using a nested python for loops.
+    # Compute the forward pass, using nested python for loops.
     # The outer for loop should iterate over timesteps, and the
     # inner for loop should iterate over hidden layers of the stack.
     #
@@ -381,7 +384,7 @@ class MultiHeadedAttention(nn.Module):
     def __init__(self, n_heads, n_units, dropout=0.1):
         """
         n_heads: the number of attention heads
-        n_units: the number of output units
+        n_units: the number of input and output units
         dropout: probability of DROPPING units
         """
         super(MultiHeadedAttention, self).__init__()
@@ -401,12 +404,15 @@ class MultiHeadedAttention(nn.Module):
         self.output = nn.Linear(n_units, n_units)
 
         # TODO: create/initialize any necessary parameters or layers
+        # Initialize all weights and biases uniformly in the range [-k, k],
+        # where k is the square root of 1/n_units.
         # Note: the only Pytorch modules you are allowed to use are nn.Linear
         # and nn.Dropout
 
     def forward(self, query, key, value, mask=None):
         # TODO: implement the masked multi-head attention.
-        # query, key, and value all have size: (batch_size, seq_len, self.n_units, self.d_k)
+        # query, key, and value correspond to Q, K, and V in the latex, and
+        # they all have size: (batch_size, seq_len, self.n_units)
         # mask has size: (batch_size, seq_len, seq_len)
         # As described in the .tex, apply input masking to the softmax
         # generating the "attention values" (i.e. A_i in the .tex)
