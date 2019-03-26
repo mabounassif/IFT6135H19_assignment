@@ -204,8 +204,31 @@ class RNN(nn.Module): # Implement a stacked vanilla RNN with Tanh nonlinearities
         - Sampled sequences of tokens
                     shape: (generated_seq_len, batch_size)
     """
+    outputs = []
+    new_hidden = hidden
 
-    return samples
+    emb_inputs = self.embed(input)
+    _input = emb_inputs[:]
+
+    for t in range(generated_seq_len):
+        tmp_hidden = []
+
+        for layer in range(self.num_layers):
+            l_hh, l_ih = self.hidden_layers[layer]
+
+            h = torch.tanh(l_ih(_input) + l_hh(new_hidden[layer]))
+            tmp_hidden.append(h)
+            _input = h
+
+        m = torch.distributions.categorical.Categorical(logits=self.output(_input))
+        g_word_idx = m.sample()
+        outputs.append(g_word_idx)
+
+        output = self.embed(g_word_idx)
+        new_hidden = tmp_hidden
+        _input = output
+
+    return outputs
 
 
 # Problem 2
@@ -314,8 +337,39 @@ class GRU(nn.Module): # Implement a stacked GRU RNN
     return logits, new_hidden
 
   def generate(self, input, hidden, generated_seq_len):
-    # TODO ========================
-    return samples
+    outputs = []
+    new_hidden = hidden
+
+    emb_inputs = self.embed(input)
+    _input = emb_inputs[:]
+
+    for t in range(generated_seq_len):
+        tmp_hidden = []
+
+        for layer in range(self.num_layers):
+            hl = self.hidden_layers[layer]
+            l_rh, l_ri = hl['reset']
+            l_fh, l_fi = hl['forget']
+            l_tilde_hh, l_tilde_hi = hl['tilde_h']
+
+            r = torch.sigmoid(l_ri(_input) + l_rh(new_hidden[layer]))
+            z = torch.sigmoid(l_fi(_input) + l_fh(new_hidden[layer]))
+            tilde_h = torch.tanh(l_tilde_hi(_input) + l_tilde_hh(r*new_hidden[layer]))
+
+            h = (1-z)*new_hidden[layer] + z*tilde_h
+
+            tmp_hidden.append(h)
+            _input = h
+
+        m = torch.distributions.categorical.Categorical(logits=self.output(_input))
+        g_word_idx = m.sample()
+        outputs.append(g_word_idx)
+
+        output = self.embed(g_word_idx)
+        new_hidden = tmp_hidden
+        _input = output
+
+    return outputs
 
 
 # Problem 3
