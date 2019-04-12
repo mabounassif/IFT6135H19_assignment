@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 # plot p0 and p1
 plt.figure()
 
-empirical
+# empirical
 xx = torch.randn(10000)
 f = lambda x: torch.tanh(x*2+1) + x*0.75
 d = lambda x: (1-torch.tanh(x*2+1)**2)*2+0.75
@@ -39,6 +39,13 @@ plt.plot(xx, N(xx))
 from samplers import distribution3, distribution4
 from torch import optim
 
+class WDLoss(nn.Module):
+    def __init__(self):
+        super(WDLoss, self).__init__()
+
+    def forward(self, p, q):
+        pass
+
 class JSDLoss(nn.Module):
     def __init__(self):
         super(JSDLoss, self).__init__()
@@ -51,9 +58,9 @@ class JSDLoss(nn.Module):
 
         return -1*(log_2 + 0.5*log_e_p + 0.5*log_e_q)
 
-class JSDDiscriminator(nn.Module):
+class Discriminator(nn.Module):
     def __init__(self, layers):
-        super(JSDDiscriminator, self).__init__()
+        super(Discriminator, self).__init__()
 
         self.fcs = []
         self.acs = []
@@ -77,7 +84,7 @@ num_epochs = 1000
 batch_size = 512
 epoch_size = 1000
 
-discr = JSDDiscriminator([1, 10, 20, 1])
+discr = Discriminator([1, 10, 20, 1])
 optimizer = optim.SGD(discr.parameters(), lr=1e-3, momentum=0.9)
 criterion = JSDLoss()
 
