@@ -36,7 +36,7 @@ plt.plot(xx, N(xx))
 
 #######--- INSERT YOUR CODE BELOW ---#######
 
-from samplers import distribution3, distribution4
+from samplers import distribution1, distribution4
 from torch import optim
 from torch.autograd import grad
 
@@ -62,9 +62,9 @@ class JSDLoss(nn.Module):
 
         return -1*(log_2 + 0.5*log_e_p + 0.5*log_e_q)
 
-class Discriminator(nn.Module):
+class MLP(nn.Module):
     def __init__(self, layers):
-        super(Discriminator, self).__init__()
+        super(MLP, self).__init__()
 
         self.fcs = []
         self.acs = []
@@ -74,7 +74,7 @@ class Discriminator(nn.Module):
             nn.init.xavier_uniform_(fc.weight)
 
             self.fcs.append(fc)
-            self.acs.append(nn.Sigmoid() if (i == len(layers) - 2) else nn.ReLU())
+            self.acs.append(nn.Sigmoid() if (i + 1 == len(layers) - 1) else nn.ReLU())
 
         self.linears = nn.ModuleList(self.fcs)
 
@@ -84,62 +84,93 @@ class Discriminator(nn.Module):
 
         return x
 
-num_epochs = 1000
+num_epochs = 30
 batch_size = 512
-epoch_size = 1000
-dim = 1
+epoch_size = 75
+dim = 2
 
-discr = Discriminator([dim, 10, 20, 1])
-optimizer = optim.SGD(discr.parameters(), lr=1e-3, momentum=0.9)
-#  criterion = JSDLoss()
-criterion = WDLoss(15)
+jsd_output = []
+wd_output = []
 
-print('training started...')
+thetas = np.arange(-1.0, 1.0, 0.1)
 
-for epoch in range(num_epochs):
-    running_loss = 0.0
+for i, theta in enumerate(thetas):
 
-    for i, (p_batch, q_batch) in enumerate(zip(distribution3(batch_size), distribution4(batch_size))):
-        if i == epoch_size:
-            break
+    jsd_discr = MLP([dim, 10, 20, 1])
+    wd_discr = MLP([dim, 10, 20, 1])
 
-        optimizer.zero_grad()
+    jsd_optimizer = optim.SGD(jsd_discr.parameters(), lr=1e-3, momentum=0.9)
+    wd_optimizer = optim.SGD(wd_discr.parameters(), lr=1e-3, momentum=0.9)
 
-        p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
-        q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
+    jsd_criterion = JSDLoss()
+    wd_criterion = WDLoss(15)
 
-        # generating z
-        u_d = torch.from_numpy(np.random.uniform(0, 1, (batch_size, dim))).type(torch.FloatTensor)
-        z_batch = u_d*p_batch + (1 - u_d)*q_batch
-        z_batch.requires_grad=True
+    print('[theta %d] training of delimiting functions started...' % (i))
 
-        p_o = discr(p_batch)
-        q_o = discr(q_batch)
-        z_o = discr(z_batch)
+    for epoch in range(num_epochs):
+        jsd_running_loss = 0.0
+        wd_running_loss = 0.0
 
-        z_o_grad = grad(z_o.sum(), z_batch, create_graph=True)[0]
+        for i, (p_batch, q_batch) in enumerate(zip(distribution1(0, batch_size), distribution1(theta, batch_size))):
+            if i == epoch_size:
+                break
 
-        loss = criterion(p_o, q_o, z_o_grad)
-        loss.backward()
-        optimizer.step()
+            jsd_optimizer.zero_grad()
+            wd_optimizer.zero_grad()
 
-        running_loss += loss.item()
-        if i % 50 == 49:
-            print('[%d, %d] loss: %.3f' %
-                 (epoch + 1, i + 1, running_loss / 50))
-            running_loss = 0.0
+            p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
+            q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
 
-print('training done.')
+            u_d = torch.from_numpy(np.random.uniform(0, 1, (batch_size, dim))).type(torch.FloatTensor)
+            z_batch = u_d*p_batch + (1 - u_d)*q_batch
+            z_batch.requires_grad = True
+
+            jsd_p_o, jsd_q_o = (jsd_discr(batch) for batch in [p_batch, q_batch])
+            wd_p_o, wd_q_o, wd_z_o = (wd_discr(batch) for batch in [p_batch, q_batch, z_batch])
+
+            wd_z_o_grad = grad(wd_z_o.sum(), z_batch)[0]
+
+            jsd_loss = jsd_criterion(jsd_p_o, jsd_q_o)
+            jsd_loss.backward()
+
+            wd_loss = wd_criterion(wd_p_o, wd_q_o, wd_z_o_grad)
+            wd_loss.backward()
+
+            jsd_optimizer.step()
+            wd_optimizer.step()
+
+            wd_running_loss += wd_loss.item()
+            jsd_running_loss += jsd_loss.item()
+            if i % 50 == 49:
+                print('[%s][%d, %d] loss: %.3f' %
+                    ('JSD', epoch + 1, i + 1, jsd_running_loss / 50))
+                print('[%s][%d, %d] loss: %.3f' %
+                    ('WD', epoch + 1, i + 1, wd_running_loss / 50))
+
+                jsd_running_loss = 0.0
+                wd_running_loss = 0.0
+
+    print('[theta %d] training of delimiting functions completed.' % (i))
+
+    p_batch, q_batch =  next(zip(distribution1(0, batch_size), distribution1(theta, batch_size)))
+
+    p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
+    q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
+
+    jsd_output.append(jsd_discr(q_batch).mean())
+    wd_output.append(wd_discr(q_batch).mean())
 
 ############### plotting things
 ############### (1) plot the output of your trained discriminator
 ############### (2) plot the estimated density contrasted with the true density
 
-r = xx # evaluate xx using your discriminator; replace xx with the output
 plt.figure(figsize=(8,4))
 plt.subplot(1,2,1)
-plt.plot(xx,r)
+plt.plot(thetas, jsd_output, 'r')
+plt.plot(thetas, wd_output, 'b')
+plt.legend(['JSD', 'WD'])
 plt.title(r'$D(x)$')
+plt.savefig('q1_3.png')
 
 estimate = np.ones_like(xx)*0.2 # estimate the density of distribution4 (on xx) using the discriminator;
                                 # replace "np.ones_like(xx)*0." with your estimate
