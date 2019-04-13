@@ -38,13 +38,17 @@ plt.plot(xx, N(xx))
 
 from samplers import distribution3, distribution4
 from torch import optim
+from torch.autograd import grad
 
 class WDLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, lamda):
         super(WDLoss, self).__init__()
 
-    def forward(self, p, q):
-        pass
+        self.lamda = lamda
+
+    def forward(self, p, q, grad_z):
+        return p.mean() - q.mean() + self.lamda*(grad_z.norm(p=2) - 1).mean()**2
+
 
 class JSDLoss(nn.Module):
     def __init__(self):
@@ -83,10 +87,12 @@ class Discriminator(nn.Module):
 num_epochs = 1000
 batch_size = 512
 epoch_size = 1000
+dim = 1
 
-discr = Discriminator([1, 10, 20, 1])
+discr = Discriminator([dim, 10, 20, 1])
 optimizer = optim.SGD(discr.parameters(), lr=1e-3, momentum=0.9)
-criterion = JSDLoss()
+#  criterion = JSDLoss()
+criterion = WDLoss(15)
 
 print('training started...')
 
@@ -99,10 +105,21 @@ for epoch in range(num_epochs):
 
         optimizer.zero_grad()
 
-        p_o = discr(torch.from_numpy(p_batch).type(torch.FloatTensor))
-        q_o = discr(torch.from_numpy(q_batch).type(torch.FloatTensor))
+        p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
+        q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
 
-        loss = criterion(p_o, q_o)
+        # generating z
+        u_d = torch.from_numpy(np.random.uniform(0, 1, (batch_size, dim))).type(torch.FloatTensor)
+        z_batch = u_d*p_batch + (1 - u_d)*q_batch
+        z_batch.requires_grad=True
+
+        p_o = discr(p_batch)
+        q_o = discr(q_batch)
+        z_o = discr(z_batch)
+
+        z_o_grad = grad(z_o.sum(), z_batch, create_graph=True)[0]
+
+        loss = criterion(p_o, q_o, z_o_grad)
         loss.backward()
         optimizer.step()
 
