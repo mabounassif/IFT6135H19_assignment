@@ -47,7 +47,7 @@ class WDLoss(nn.Module):
         self.lamda = lamda
 
     def forward(self, p, q, grad_z):
-        return p.mean() - q.mean() + self.lamda*(grad_z.norm(p=2) - 1).mean()**2
+        return p.mean() - q.mean() + self.lamda*(grad_z.norm(dim=1) - 1).mean()**2
 
 
 class JSDLoss(nn.Module):
