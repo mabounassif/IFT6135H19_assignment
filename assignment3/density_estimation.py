@@ -18,6 +18,7 @@ plt.figure()
 
 # empirical
 xx = torch.randn(10000)
+
 f = lambda x: torch.tanh(x*2+1) + x*0.75
 d = lambda x: (1-torch.tanh(x*2+1)**2)*2+0.75
 plt.hist(f(xx), 100, alpha=0.5, density=1)
@@ -36,9 +37,19 @@ plt.plot(xx, N(xx))
 
 #######--- INSERT YOUR CODE BELOW ---#######
 
-from samplers import distribution1, distribution4
+from samplers import distribution1, distribution2, distribution3, distribution4
 from torch import optim
 from torch.autograd import grad
+
+class Q1_4Loss(nn.Module):
+    def __init__(self):
+        super(Q1_4Loss, self).__init__()
+
+    def forward(self, p, q):
+        log_e_q = torch.mean(torch.log(q))
+        log_e_p = torch.mean(torch.log(1 - p))
+
+        return -1*(log_e_p + log_e_q)
 
 class WDLoss(nn.Module):
     def __init__(self, lamda):
@@ -84,9 +95,9 @@ class MLP(nn.Module):
 
         return x
 
-num_epochs = 30
+num_epochs = 50
 batch_size = 512
-epoch_size = 75
+epoch_size = 100
 dim = 2
 
 jsd_output = []
@@ -95,9 +106,8 @@ wd_output = []
 thetas = np.arange(-1.0, 1.0, 0.1)
 
 for i, theta in enumerate(thetas):
-
-    jsd_discr = MLP([dim, 10, 20, 1])
-    wd_discr = MLP([dim, 10, 20, 1])
+    jsd_discr = MLP([dim, 5, 5, 1])
+    wd_discr = MLP([dim, 5, 5, 1])
 
     jsd_optimizer = optim.SGD(jsd_discr.parameters(), lr=1e-3, momentum=0.9)
     wd_optimizer = optim.SGD(wd_discr.parameters(), lr=1e-3, momentum=0.9)
@@ -157,8 +167,8 @@ for i, theta in enumerate(thetas):
     p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
     q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
 
-    jsd_output.append(jsd_discr(q_batch).mean())
-    wd_output.append(wd_discr(q_batch).mean())
+    jsd_output.append(jsd_discr(p_batch).mean())
+    wd_output.append(wd_discr(p_batch).mean())
 
 ############### plotting things
 ############### (1) plot the output of your trained discriminator
@@ -172,10 +182,53 @@ plt.legend(['JSD', 'WD'])
 plt.title(r'$D(x)$')
 plt.savefig('q1_3.png')
 
-estimate = np.ones_like(xx)*0.2 # estimate the density of distribution4 (on xx) using the discriminator;
-                                # replace "np.ones_like(xx)*0." with your estimate
+discr = MLP([1, 5, 5, 1])
+
+optimizer = optim.SGD(discr.parameters(), lr=1e-3, momentum=0.9)
+criterion = Q1_4Loss()
+
+losses = []
+
+print('training q4 discriminator started...')
+
+for epoch in range(num_epochs):
+    running_loss = 0.0
+
+    for i, (p_batch, q_batch) in enumerate(zip(distribution3(batch_size), distribution4(batch_size))):
+        if i == epoch_size:
+            break
+
+        optimizer.zero_grad()
+
+        p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
+        q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
+
+        p_o, q_o = (discr(batch) for batch in [p_batch, q_batch])
+        loss = criterion(p_o, q_o)
+        loss.backward()
+
+        optimizer.step()
+
+        running_loss += loss.item()
+        if i % 50 == 49:
+            print('[%d, %d] loss: %.3f' %
+                 (epoch + 1, i + 1, running_loss / 50))
+
+            losses.append(running_loss / 50)
+            running_loss = 0.0
+
+print('training q4 discriminator completed.')
+
+tensor_xx = torch.from_numpy(xx).type(torch.FloatTensor).unsqueeze(1)
+D = discr(tensor_xx)
+
+estimate = (tensor_xx * D) / (1 - D)
+
 plt.subplot(1,2,2)
-plt.plot(xx,estimate)
+plt.plot(xx, estimate.detach().numpy())
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.legend(['Estimated','True'])
 plt.title('Estimated vs True')
+
+plt.show()
+
