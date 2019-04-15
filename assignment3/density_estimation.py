@@ -30,6 +30,8 @@ N = lambda x: np.exp(-x**2/2.)/((2*np.pi)**0.5)
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.plot(xx, N(xx))
 
+plt.savefig('q1_distributions.png')
+
 ############### import the sampler ``samplers.distribution4''
 ############### train a discriminator on distribution4 and standard gaussian
 ############### estimate the density of distribution4
@@ -92,94 +94,89 @@ class MLP(nn.Module):
 
         return x
 
-num_epochs = 255
+num_epochs = 5000
 batch_size = 512
-epoch_size = 250
 dim = 2
-
-estimate = True
 
 jsd_output = []
 wd_output = []
 
 thetas = np.arange(-1.0, 1.0, 0.1)
 
-if not estimate:
-    for i, theta in enumerate(thetas):
-        jsd_discr = MLP([dim, 15, 15, 1])
-        wd_discr = MLP([dim, 15, 15, 1])
+for i, theta in enumerate(thetas):
+    jsd_discr = MLP([dim, 182, 182, 1])
+    wd_discr = MLP([dim, 182, 182, 1])
 
-        jsd_optimizer = optim.SGD(jsd_discr.parameters(), lr=1e-3, momentum=0.9)
-        wd_optimizer = optim.SGD(wd_discr.parameters(), lr=1e-3, momentum=0.9)
+    #  jsd_optimizer = optim.SGD(jsd_discr.parameters(), lr=1e-3, momentum=0.9)
+    jsd_optimizer = optim.Adam(jsd_discr.parameters(), lr=1e-3)
+    #  wd_optimizer = optim.SGD(wd_discr.parameters(), lr=1e-3, momentum=0.9)
+    wd_optimizer = optim.Adam(wd_discr.parameters(), lr=1e-3)
 
-        jsd_criterion = JSDLoss()
-        wd_criterion = WDLoss(15)
+    jsd_criterion = JSDLoss()
+    wd_criterion = WDLoss(15)
 
-        print('[theta %d] training of delimiting functions started...' % (i))
+    print('[theta %d] training of delimiting functions started...' % (i))
 
-        for epoch in range(num_epochs):
-            jsd_running_loss = 0.0
-            wd_running_loss = 0.0
+    for epoch in range(num_epochs):
+        jsd_running_loss = 0.0
+        wd_running_loss = 0.0
 
-            for i, (p_batch, q_batch) in enumerate(zip(distribution1(0, batch_size), distribution1(theta, batch_size))):
-                if i == epoch_size:
-                    break
-
-                jsd_optimizer.zero_grad()
-                wd_optimizer.zero_grad()
-
-                p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
-                q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
-
-                u_d = torch.from_numpy(np.random.uniform(0, 1, (batch_size, dim))).type(torch.FloatTensor)
-                z_batch = u_d*p_batch + (1 - u_d)*q_batch
-                z_batch.requires_grad = True
-
-                jsd_p_o, jsd_q_o = (jsd_discr(batch) for batch in [p_batch, q_batch])
-                wd_p_o, wd_q_o, wd_z_o = (wd_discr(batch) for batch in [p_batch, q_batch, z_batch])
-
-                wd_z_o_grad = grad(wd_z_o.sum(), z_batch)[0]
-
-                jsd_loss = jsd_criterion(jsd_p_o, jsd_q_o)
-                jsd_loss.backward()
-
-                wd_loss = wd_criterion(wd_p_o, wd_q_o, wd_z_o_grad)
-                wd_loss.backward()
-
-                jsd_optimizer.step()
-                wd_optimizer.step()
-
-                wd_running_loss += wd_loss.item()
-                jsd_running_loss += jsd_loss.item()
-                if i % epoch_size == 0:
-                    print('[%s][%d, %d] loss: %.6f' %
-                        ('JSD', epoch + 1, i + 1, jsd_running_loss / epoch_size))
-                    print('[%s][%d, %d] loss: %.6f' %
-                        ('WD', epoch + 1, i + 1, wd_running_loss / epoch_size))
-
-                    jsd_running_loss = 0.0
-                    wd_running_loss = 0.0
-
-        print('[theta %d] training of delimiting functions completed.' % (i))
-
-        p_batch, q_batch =  next(zip(distribution1(0, batch_size), distribution1(theta, batch_size)))
+        p_batch, q_batch  = next(zip(distribution1(0, batch_size), distribution1(theta, batch_size)))
+        jsd_optimizer.zero_grad()
+        wd_optimizer.zero_grad()
 
         p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
         q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
 
-        jsd_output.append(jsd_discr(p_batch).mean())
-        wd_output.append(wd_discr(p_batch).mean())
+        u_d = torch.from_numpy(np.random.uniform(0, 1, (batch_size, dim))).type(torch.FloatTensor)
+        z_batch = u_d*p_batch + (1 - u_d)*q_batch
+        z_batch.requires_grad = True
+
+        jsd_p_o, jsd_q_o = (jsd_discr(batch) for batch in [p_batch, q_batch])
+        wd_p_o, wd_q_o, wd_z_o = (wd_discr(batch) for batch in [p_batch, q_batch, z_batch])
+
+        wd_z_o_grad = grad(wd_z_o.sum(), z_batch)[0]
+
+        jsd_loss = jsd_criterion(jsd_p_o, jsd_q_o)
+        jsd_loss.backward()
+
+        wd_loss = wd_criterion(wd_p_o, wd_q_o, wd_z_o_grad)
+        wd_loss.backward()
+
+        jsd_optimizer.step()
+        wd_optimizer.step()
+
+        wd_running_loss += wd_loss.item()
+        jsd_running_loss += jsd_loss.item()
+
+        print('[%s][%d, %d] loss: %.6f' %
+            ('JSD', epoch + 1, i + 1, jsd_running_loss))
+        print('[%s][%d, %d] loss: %.6f' %
+            ('WD', epoch + 1, i + 1, wd_running_loss))
+
+        jsd_running_loss = 0.0
+        wd_running_loss = 0.0
+
+    print('[theta %d] training of delimiting functions completed.' % (i))
+
+    p_batch, q_batch =  next(zip(distribution1(0, batch_size), distribution1(theta, batch_size)))
+
+    p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
+    q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
+
+    jsd_output.append(jsd_discr(p_batch).mean())
+    wd_output.append(wd_discr(p_batch).mean())
 
 
-    plt.figure(figsize=(8,4))
-    plt.subplot(1,2,1)
-    plt.plot(thetas, jsd_output, 'r')
-    plt.plot(thetas, wd_output, 'b')
-    plt.legend(['JSD', 'WD'])
-    plt.title(r'$D(x)$')
-    plt.savefig('q1_3.png')
+plt.figure(figsize=(8,4))
+plt.subplot(1,2,1)
+plt.plot(thetas, jsd_output, 'r')
+plt.plot(thetas, wd_output, 'b')
+plt.legend(['JSD', 'WD'])
+plt.title(r'$D(x)$')
+plt.savefig('q1_3.png')
 
-num_epochs = 20
+num_epochs = 5000
 discr = MLP([1, 182, 182, 1])
 
 optimizer = optim.Adam(discr.parameters(), lr=1e-3)
@@ -190,27 +187,23 @@ print('training q4 discriminator started...')
 for epoch in range(num_epochs):
     running_loss = 0.0
 
-    for i, (p_batch, q_batch) in enumerate(zip(distribution4(batch_size), distribution3(batch_size))):
-        if i == epoch_size:
-            break
+    p_batch, q_batch = next(zip(distribution4(batch_size), distribution3(batch_size)))
+    optimizer.zero_grad()
 
-        optimizer.zero_grad()
+    p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
+    q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
 
-        p_batch = torch.from_numpy(p_batch).type(torch.FloatTensor)
-        q_batch = torch.from_numpy(q_batch).type(torch.FloatTensor)
+    p_o, q_o = (discr(batch) for batch in [p_batch, q_batch])
+    loss = criterion(p_o, q_o)
+    loss.backward()
 
-        p_o, q_o = (discr(batch) for batch in [p_batch, q_batch])
-        loss = criterion(p_o, q_o)
-        loss.backward()
+    optimizer.step()
 
-        optimizer.step()
+    running_loss += loss.item()
+    print('[%d] loss: %.6f' %
+            (epoch + 1, running_loss))
 
-        running_loss += loss.item()
-        if i % epoch_size == 0:
-            print('[%d, %d] loss: %.6f' %
-                 (epoch + 1, i + 1, running_loss / epoch_size))
-
-            running_loss = 0
+    running_loss = 0
 
 print('training q4 discriminator completed.')
 
@@ -225,5 +218,6 @@ plt.plot(xx, estimate)
 plt.plot(f(torch.from_numpy(xx)).numpy(), d(torch.from_numpy(xx)).numpy()**(-1)*N(xx))
 plt.legend(['Estimated','True'])
 plt.title('Estimated vs True')
+plt.savefig('q1_4.png')
 
 plt.show()
