@@ -179,10 +179,10 @@ if not estimate:
     plt.title(r'$D(x)$')
     plt.savefig('q1_3.png')
 
-num_epochs = 175
-discr = MLP([1, 200, 200, 1])
+num_epochs = 20
+discr = MLP([1, 182, 182, 1])
 
-optimizer = optim.Adam(discr.parameters(), lr=1e-2)
+optimizer = optim.Adam(discr.parameters(), lr=1e-3)
 criterion = Q1_4Loss()
 
 print('training q4 discriminator started...')
